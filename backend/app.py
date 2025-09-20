@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Unified Flask App for Facial Paralysis Detection
-Combines the best features from all app versions
+Uses standardized preprocessing to ensure training/inference consistency
 """
 
 from flask import Flask, request, jsonify
@@ -14,6 +14,7 @@ import json
 import joblib
 from pathlib import Path
 import logging
+from standardized_preprocessing import preprocessor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -33,6 +34,10 @@ try:
     model = joblib.load('models/ai_model.pkl')
     print("✅ AI model loaded successfully!")
     logger.info("AI model loaded successfully")
+    
+    # Validate model compatibility with preprocessing
+    preprocessor.validate_model_compatibility(model)
+    
 except Exception as e:
     print(f"❌ Error loading model: {e}")
     logger.error(f"Error loading model: {e}")
@@ -48,92 +53,8 @@ except Exception as e:
     logger.warning(f"Scaler not found or error loading: {e}")
     scaler = None
 
-def extract_enhanced_features(image):
-    """Extract enhanced features matching the improved training"""
-    try:
-        # Convert to RGB if necessary
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
-        
-        # Resize to 64x64 (matching improved training)
-        image = image.resize((64, 64), Image.Resampling.LANCZOS)
-        
-        # Convert to grayscale
-        gray = image.convert('L')
-        gray_array = np.array(gray)
-        
-        # Extract multiple feature types
-        features = []
-        
-        # 1. Basic pixel features
-        basic_features = gray_array.flatten()
-        features.extend(basic_features)
-        
-        # 2. Asymmetry features (crucial for paralysis detection)
-        left_half = gray_array[:, :32]
-        right_half = gray_array[:, 32:]
-        right_flipped = np.fliplr(right_half)
-        
-        # Calculate asymmetry metrics
-        asymmetry = np.mean(np.abs(left_half.astype(float) - right_flipped.astype(float)))
-        features.append(asymmetry)
-        
-        # 3. Edge features
-        grad_x = np.abs(np.diff(gray_array, axis=1))
-        grad_y = np.abs(np.diff(gray_array, axis=0))
-        edge_density = (np.sum(grad_x) + np.sum(grad_y)) / (64 * 64)
-        features.append(edge_density)
-        
-        # 4. Texture features
-        texture_features = []
-        for i in range(0, 64, 8):
-            for j in range(0, 64, 8):
-                block = gray_array[i:i+8, j:j+8]
-                if block.size > 0:
-                    features.extend([np.mean(block), np.std(block)])
-                    if block.shape[0] > 1 and block.shape[1] > 1:
-                        grad_x = np.abs(np.diff(block, axis=1))
-                        grad_y = np.abs(np.diff(block, axis=0))
-                        features.extend([np.mean(grad_x), np.mean(grad_y)])
-        
-        # 5. Statistical features
-        stats_features = [
-            np.mean(gray_array),
-            np.std(gray_array),
-            np.var(gray_array),
-            np.median(gray_array),
-            np.percentile(gray_array, 25),
-            np.percentile(gray_array, 75)
-        ]
-        features.extend(stats_features)
-        
-        return np.array(features)
-    except Exception as e:
-        raise Exception(f"Feature extraction error: {e}")
-
-def preprocess_image(image_data):
-    """Enhanced preprocessing for facial paralysis detection"""
-    try:
-        # Handle different input formats
-        if isinstance(image_data, str):
-            # Remove data URL prefix if present
-            if ',' in image_data:
-                image_data = image_data.split(',')[1]
-            
-            # Decode base64
-            image_bytes = base64.b64decode(image_data)
-        else:
-            image_bytes = image_data
-        
-        # Open image with PIL
-        image = Image.open(io.BytesIO(image_bytes))
-        
-        # Extract enhanced features
-        features = extract_enhanced_features(image)
-        
-        return features.reshape(1, -1)
-    except Exception as e:
-        raise Exception(f"Image preprocessing error: {e}")
+# Note: Feature extraction and preprocessing now handled by standardized_preprocessing.py
+# This ensures EXACT consistency with training pipeline
 
 def generate_recommendations(prediction, confidence):
     """Generate recommendations based on AI prediction"""
@@ -202,16 +123,35 @@ def analyze():
         if not image_data:
             return jsonify({'error': 'No image data provided'}), 400
         
-        # Process image
-        img_array = preprocess_image(image_data)
+        # Process image using standardized preprocessing
+        logger.info("🔍 Processing image with standardized preprocessing...")
+        img_array = preprocessor.preprocess_image(image_data)
+        
+        logger.info(f"✅ Image processed successfully")
+        logger.info(f"   Feature shape: {img_array.shape}")
+        logger.info(f"   Expected features: {model.n_features_in_}")
+        
+        # Validate feature count
+        if img_array.shape[1] != model.n_features_in_:
+            logger.error(f"❌ Feature count mismatch!")
+            logger.error(f"   Expected: {model.n_features_in_}")
+            logger.error(f"   Got: {img_array.shape[1]}")
+            return jsonify({'error': f'Feature count mismatch: expected {model.n_features_in_}, got {img_array.shape[1]}'}), 500
         
         # Scale features if scaler is available
         if scaler is not None:
+            logger.info("🔧 Scaling features...")
             img_array = scaler.transform(img_array)
+            logger.info(f"   Scaled features shape: {img_array.shape}")
         
         # Make prediction
+        logger.info("🤖 Making prediction...")
         prediction = model.predict(img_array)[0]
         probabilities = model.predict_proba(img_array)[0]
+        
+        logger.info(f"✅ Prediction completed")
+        logger.info(f"   Prediction: {prediction}")
+        logger.info(f"   Confidence: {max(probabilities):.4f}")
         
         result = {
             'success': True,

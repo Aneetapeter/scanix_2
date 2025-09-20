@@ -1,0 +1,31 @@
+{
+  "model_type": "SVC",
+  "model_name": "svm",
+  "image_size": [
+    128,
+    128
+  ],
+  "feature_count": 4337,
+  "training_date": "2025-09-21T01:22:58.256015",
+  "training_history": {
+    "random_forest": {
+      "test_score": 0.9525,
+      "cv_mean": 0.9393749999999998,
+      "cv_std": 0.00780624749799798
+    },
+    "svm": {
+      "test_score": 0.9825,
+      "cv_mean": 0.9768749999999999,
+      "cv_std": 0.006731456008918133
+    },
+    "logistic_regression": {
+      "test_score": 0.9775,
+      "cv_mean": 0.976875,
+      "cv_std": 0.004677071733467411
+    }
+  },
+  "class_labels": {
+    "0": "normal",
+    "1": "paralyzed"
+  }
+}
