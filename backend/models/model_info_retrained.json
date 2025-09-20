@@ -1,7 +1,0 @@
-{
-  "model_type": "RandomForestClassifier",
-  "feature_count": 1024,
-  "n_estimators": 50,
-  "accuracy": 0.9375,
-  "training_date": "2025-09-20"
-}

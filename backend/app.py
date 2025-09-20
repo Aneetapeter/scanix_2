@@ -1,248 +1,281 @@
+#!/usr/bin/env python3
+"""
+Unified Flask App for Facial Paralysis Detection
+Combines the best features from all app versions
+"""
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import cv2
 import numpy as np
 from PIL import Image
-import tensorflow as tf
-import os
 import base64
-from datetime import datetime
+import io
 import json
-from model_inference import get_detector, predict_facial_paralysis
-from optimized_inference import get_optimized_detector, predict_facial_paralysis_fast
+import joblib
+from pathlib import Path
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=[
+    'http://localhost:3000', 'http://127.0.0.1:3000',
+    'http://localhost:3001', 'http://127.0.0.1:3001',
+    'http://localhost:3002', 'http://127.0.0.1:3002',
+    'http://localhost:8080', 'http://127.0.0.1:8080'
+])
 
-# Global variables for the model
-model_loaded = False
-detector = None
+# Load AI model and scaler
+print("Loading AI model...")
+try:
+    model = joblib.load('models/ai_model.pkl')
+    print("✅ AI model loaded successfully!")
+    logger.info("AI model loaded successfully")
+except Exception as e:
+    print(f"❌ Error loading model: {e}")
+    logger.error(f"Error loading model: {e}")
+    model = None
 
-def load_model():
-    """Load the trained CNN model for facial paralysis detection"""
-    global model_loaded, detector
+print("Loading scaler...")
+try:
+    scaler = joblib.load('models/scaler.pkl')
+    print("✅ Scaler loaded successfully!")
+    logger.info("Scaler loaded successfully")
+except Exception as e:
+    print(f"❌ Error loading scaler: {e}")
+    logger.warning(f"Scaler not found or error loading: {e}")
+    scaler = None
+
+def extract_enhanced_features(image):
+    """Extract enhanced features matching the improved training"""
     try:
-        # Try to load the trained model
-        detector = get_detector()
-        if detector.is_model_loaded():
-            model_loaded = True
-            print("Trained model loaded successfully")
+        # Convert to RGB if necessary
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+        
+        # Resize to 64x64 (matching improved training)
+        image = image.resize((64, 64), Image.Resampling.LANCZOS)
+        
+        # Convert to grayscale
+        gray = image.convert('L')
+        gray_array = np.array(gray)
+        
+        # Extract multiple feature types
+        features = []
+        
+        # 1. Basic pixel features
+        basic_features = gray_array.flatten()
+        features.extend(basic_features)
+        
+        # 2. Asymmetry features (crucial for paralysis detection)
+        left_half = gray_array[:, :32]
+        right_half = gray_array[:, 32:]
+        right_flipped = np.fliplr(right_half)
+        
+        # Calculate asymmetry metrics
+        asymmetry = np.mean(np.abs(left_half.astype(float) - right_flipped.astype(float)))
+        features.append(asymmetry)
+        
+        # 3. Edge features
+        grad_x = np.abs(np.diff(gray_array, axis=1))
+        grad_y = np.abs(np.diff(gray_array, axis=0))
+        edge_density = (np.sum(grad_x) + np.sum(grad_y)) / (64 * 64)
+        features.append(edge_density)
+        
+        # 4. Texture features
+        texture_features = []
+        for i in range(0, 64, 8):
+            for j in range(0, 64, 8):
+                block = gray_array[i:i+8, j:j+8]
+                if block.size > 0:
+                    features.extend([np.mean(block), np.std(block)])
+                    if block.shape[0] > 1 and block.shape[1] > 1:
+                        grad_x = np.abs(np.diff(block, axis=1))
+                        grad_y = np.abs(np.diff(block, axis=0))
+                        features.extend([np.mean(grad_x), np.mean(grad_y)])
+        
+        # 5. Statistical features
+        stats_features = [
+            np.mean(gray_array),
+            np.std(gray_array),
+            np.var(gray_array),
+            np.median(gray_array),
+            np.percentile(gray_array, 25),
+            np.percentile(gray_array, 75)
+        ]
+        features.extend(stats_features)
+        
+        return np.array(features)
+    except Exception as e:
+        raise Exception(f"Feature extraction error: {e}")
+
+def preprocess_image(image_data):
+    """Enhanced preprocessing for facial paralysis detection"""
+    try:
+        # Handle different input formats
+        if isinstance(image_data, str):
+            # Remove data URL prefix if present
+            if ',' in image_data:
+                image_data = image_data.split(',')[1]
+            
+            # Decode base64
+            image_bytes = base64.b64decode(image_data)
         else:
-            # Fallback to demo model if trained model not available
-            detector = None
-            model_loaded = False
-            print("Trained model not available, using demo model")
+            image_bytes = image_data
+        
+        # Open image with PIL
+        image = Image.open(io.BytesIO(image_bytes))
+        
+        # Extract enhanced features
+        features = extract_enhanced_features(image)
+        
+        return features.reshape(1, -1)
     except Exception as e:
-        print(f"Error loading model: {e}")
-        model_loaded = False
+        raise Exception(f"Image preprocessing error: {e}")
 
-def create_demo_model():
-    """Create a demo CNN model for facial paralysis detection (fallback)"""
-    model = tf.keras.Sequential([
-        tf.keras.layers.Conv2D(32, (3, 3), activation='relu', input_shape=(224, 224, 3)),
-        tf.keras.layers.MaxPooling2D(2, 2),
-        tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
-        tf.keras.layers.MaxPooling2D(2, 2),
-        tf.keras.layers.Conv2D(128, (3, 3), activation='relu'),
-        tf.keras.layers.MaxPooling2D(2, 2),
-        tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(512, activation='relu'),
-        tf.keras.layers.Dropout(0.5),
-        tf.keras.layers.Dense(1, activation='sigmoid')
-    ])
-    
-    # Compile the model
-    model.compile(
-        optimizer='adam',
-        loss='binary_crossentropy',
-        metrics=['accuracy']
-    )
-    
-    # Initialize weights (in production, load pre-trained weights)
-    model.build((None, 224, 224, 3))
-    
-    return model
-
-def preprocess_image(image_path):
-    """Preprocess the uploaded image for model input"""
-    try:
-        # Read image
-        image = cv2.imread(image_path)
-        if image is None:
-            raise ValueError("Could not read image")
-        
-        # Convert BGR to RGB
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        
-        # Resize to model input size
-        image = cv2.resize(image, (224, 224))
-        
-        # Normalize pixel values
-        image = image.astype(np.float32) / 255.0
-        
-        # Add batch dimension
-        image = np.expand_dims(image, axis=0)
-        
-        return image
-    except Exception as e:
-        print(f"Error preprocessing image: {e}")
-        return None
-
-def detect_facial_paralysis(image_path):
-    """Detect facial paralysis using the optimized model"""
-    try:
-        # Use optimized model for fast prediction
-        result = predict_facial_paralysis_fast(image_path)
-        
-        # Add timestamp if not present
-        if 'timestamp' not in result:
-            result['timestamp'] = datetime.now().isoformat()
-        
-        return result
-    
-    except Exception as e:
-        print(f"Error in facial paralysis detection: {e}")
-        # Fallback to demo model
-        return detect_with_demo_model(image_path)
-
-def detect_with_demo_model(image_path):
-    """Fallback detection using demo model"""
-    try:
-        # Create demo model
-        model = create_demo_model()
-        
-        # Preprocess image
-        processed_image = preprocess_image(image_path)
-        if processed_image is None:
-            return None
-        
-        # Make prediction
-        prediction = model.predict(processed_image, verbose=0)
-        confidence = float(prediction[0][0])
-        
-        # Determine if paralysis is detected (threshold = 0.5)
-        has_paralysis = confidence > 0.5
-        
-        # Generate recommendation based on confidence
-        if has_paralysis:
-            if confidence > 0.8:
-                recommendation = "High confidence of facial paralysis detected. Please consult a neurologist immediately for urgent evaluation and treatment."
-            else:
-                recommendation = "Potential facial paralysis detected. We recommend scheduling an appointment with a neurologist for further evaluation."
+def generate_recommendations(prediction, confidence):
+    """Generate recommendations based on AI prediction"""
+    if prediction == 1:  # Paralysis
+        if confidence > 0.8:
+            return [
+                "High confidence of facial paralysis detected",
+                "Immediate medical consultation recommended",
+                "Consider emergency care if symptoms are severe",
+                "Document symptoms and seek specialist evaluation"
+            ]
         else:
-            if confidence < 0.2:
-                recommendation = "No signs of facial paralysis detected. Continue regular health monitoring."
-            else:
-                recommendation = "Low probability of facial paralysis. If you have concerns, consider consulting a healthcare provider."
-        
-        return {
-            'has_paralysis': has_paralysis,
-            'confidence': confidence,
-            'recommendation': recommendation,
-            'timestamp': datetime.now().isoformat(),
-            'model_type': 'demo'
-        }
-    
-    except Exception as e:
-        print(f"Error in demo model detection: {e}")
-        return None
+            return [
+                "Possible facial paralysis detected",
+                "Medical evaluation recommended",
+                "Monitor for additional symptoms",
+                "Consult with healthcare provider"
+            ]
+    else:  # Normal
+        return [
+            "No facial paralysis detected",
+            "Continue regular health monitoring",
+            "Consult healthcare provider if symptoms develop"
+        ]
+
+@app.route('/health', methods=['GET'])
+def health():
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'healthy',
+        'model_loaded': model is not None,
+        'scaler_loaded': scaler is not None,
+        'version': '2.0.0'
+    })
 
 @app.route('/analyze', methods=['POST'])
-def analyze_image():
-    """Analyze uploaded image for facial paralysis"""
+def analyze():
+    """Analyze image for facial paralysis"""
     try:
-        if 'image' not in request.files:
-            return jsonify({'error': 'No image file provided'}), 400
+        if model is None:
+            return jsonify({'error': 'Model not loaded'}), 500
         
-        file = request.files['image']
-        if file.filename == '':
-            return jsonify({'error': 'No image file selected'}), 400
+        logger.info(f"Request method: {request.method}")
+        logger.info(f"Content type: {request.content_type}")
         
-        # Save uploaded file temporarily
-        upload_dir = 'uploads'
-        os.makedirs(upload_dir, exist_ok=True)
+        # Handle different request types
+        image_data = None
         
-        filename = f"temp_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-        file_path = os.path.join(upload_dir, filename)
-        file.save(file_path)
+        # Check if it's a multipart request (file upload)
+        if 'image' in request.files:
+            file = request.files['image']
+            if file and file.filename:
+                image_data = file.read()
+                logger.info(f"Received multipart file: {file.filename}, size: {len(image_data)}")
         
-        # Analyze the image
-        result = detect_facial_paralysis(file_path)
+        # Check if it's JSON request
+        elif request.is_json and 'image' in request.json:
+            image_data = request.json['image']
+            logger.info(f"Received JSON image data, length: {len(str(image_data))}")
         
-        # Clean up temporary file
-        try:
-            os.remove(file_path)
-        except:
-            pass
+        # Check if it's form data
+        elif 'image' in request.form:
+            image_data = request.form['image']
+            logger.info(f"Received form image data, length: {len(str(image_data))}")
         
-        if result is None:
-            return jsonify({'error': 'Failed to analyze image'}), 500
+        if not image_data:
+            return jsonify({'error': 'No image data provided'}), 400
         
+        # Process image
+        img_array = preprocess_image(image_data)
+        
+        # Scale features if scaler is available
+        if scaler is not None:
+            img_array = scaler.transform(img_array)
+        
+        # Make prediction
+        prediction = model.predict(img_array)[0]
+        probabilities = model.predict_proba(img_array)[0]
+        
+        result = {
+            'success': True,
+            'prediction': 'Paralysis detected' if prediction == 1 else 'Normal',
+            'confidence': float(max(probabilities)),
+            'is_paralysis': bool(prediction),
+            'probabilities': {
+                'normal': float(probabilities[0]),
+                'paralysis': float(probabilities[1])
+            },
+            'recommendations': generate_recommendations(prediction, max(probabilities))
+        }
+        
+        logger.info(f"Prediction successful: {result['prediction']} (confidence: {result['confidence']:.4f})")
         return jsonify(result)
-    
+        
     except Exception as e:
-        print(f"Error in analyze_image: {e}")
-        return jsonify({'error': 'Internal server error'}), 500
+        logger.error(f"Analysis error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/doctors', methods=['GET'])
 def get_doctors():
     """Get list of available doctors"""
     doctors = [
         {
-            'id': '1',
+            'id': 1,
             'name': 'Dr. Sarah Johnson',
-            'specialization': 'Neurology',
-            'image_url': 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=300&h=300&fit=crop&crop=face',
-            'rating': 4.9,
-            'experience': 15,
-            'is_online': True,
-            'hospital': 'Mayo Clinic',
-            'languages': ['English', 'Spanish'],
-            'bio': 'Specialized in facial nerve disorders and stroke rehabilitation.'
-        },
-        {
-            'id': '2',
-            'name': 'Dr. Michael Chen',
-            'specialization': 'Telemedicine',
-            'image_url': 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=300&h=300&fit=crop&crop=face',
+            'specialty': 'Neurologist',
+            'experience': '15 years',
             'rating': 4.8,
-            'experience': 12,
-            'is_online': True,
-            'hospital': 'Johns Hopkins',
-            'languages': ['English', 'Mandarin'],
-            'bio': 'Expert in remote neurological consultations and AI-assisted diagnosis.'
+            'available': True,
+            'phone': '+1-555-0123',
+            'email': 'sarah.johnson@medical.com'
         },
         {
-            'id': '3',
-            'name': 'Dr. Emily Rodriguez',
-            'specialization': 'Neurology',
-            'image_url': 'https://images.unsplash.com/photo-1594824373636-4b0b0b0b0b0b?w=300&h=300&fit=crop&crop=face',
-            'rating': 4.7,
-            'experience': 10,
-            'is_online': False,
-            'hospital': 'Cleveland Clinic',
-            'languages': ['English', 'Spanish', 'Portuguese'],
-            'bio': 'Focused on early detection and treatment of facial paralysis.'
-        },
-        {
-            'id': '4',
-            'name': 'Dr. James Wilson',
-            'specialization': 'Telemedicine',
-            'image_url': 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=300&h=300&fit=crop&crop=face',
+            'id': 2,
+            'name': 'Dr. Michael Chen',
+            'specialty': 'Facial Plastic Surgeon',
+            'experience': '12 years',
             'rating': 4.9,
-            'experience': 18,
-            'is_online': True,
-            'hospital': 'Massachusetts General',
-            'languages': ['English'],
-            'bio': 'Pioneer in telemedicine and digital health solutions.'
+            'available': True,
+            'phone': '+1-555-0124',
+            'email': 'michael.chen@medical.com'
+        },
+        {
+            'id': 3,
+            'name': 'Dr. Emily Rodriguez',
+            'specialty': 'Emergency Medicine',
+            'experience': '10 years',
+            'rating': 4.7,
+            'available': False,
+            'phone': '+1-555-0125',
+            'email': 'emily.rodriguez@medical.com'
         }
     ]
     
-    return jsonify(doctors)
+    return jsonify({
+        'success': True,
+        'doctors': doctors
+    })
 
 @app.route('/send-report', methods=['POST'])
-def send_report_to_doctor():
-    """Send analysis report to a doctor"""
+def send_report():
+    """Send analysis report to doctor"""
     try:
         data = request.get_json()
         doctor_id = data.get('doctor_id')
@@ -251,19 +284,20 @@ def send_report_to_doctor():
         if not doctor_id or not result:
             return jsonify({'error': 'Missing required fields'}), 400
         
-        # In a real application, you would:
-        # 1. Store the report in a database
-        # 2. Send notification to the doctor
-        # 3. Log the interaction
+        logger.info(f"Report sent to doctor {doctor_id}: {result}")
         
-        return jsonify({'message': 'Report sent successfully'})
+        return jsonify({
+            'success': True,
+            'message': f'Report sent to doctor {doctor_id}',
+            'timestamp': '2025-01-20T02:00:00Z'
+        })
     
     except Exception as e:
-        print(f"Error in send_report_to_doctor: {e}")
-        return jsonify({'error': 'Internal server error'}), 500
+        logger.error(f"Send report error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/contact', methods=['POST'])
-def submit_contact_form():
+def contact():
     """Handle contact form submission"""
     try:
         data = request.get_json()
@@ -274,29 +308,21 @@ def submit_contact_form():
         if not all([name, email, message]):
             return jsonify({'error': 'Missing required fields'}), 400
         
-        # In a real application, you would:
-        # 1. Store the message in a database
-        # 2. Send email notification
-        # 3. Log the submission
+        logger.info(f"Contact form: {name} ({email}) - {message}")
         
-        return jsonify({'message': 'Contact form submitted successfully'})
+        return jsonify({
+            'success': True,
+            'message': 'Thank you for your message. We will get back to you soon!'
+        })
     
     except Exception as e:
-        print(f"Error in submit_contact_form: {e}")
-        return jsonify({'error': 'Internal server error'}), 500
-
-@app.route('/health', methods=['GET'])
-def health_check():
-    """Health check endpoint"""
-    return jsonify({
-        'status': 'healthy',
-        'model_loaded': model_loaded,
-        'timestamp': datetime.now().isoformat()
-    })
+        logger.error(f"Contact form error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    # Load the model when the app starts
-    load_model()
-    
-    # Run the Flask app
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    print("🚀 Starting Scanix AI Server...")
+    print("✅ Supports multipart file uploads!")
+    print("✅ Supports JSON requests!")
+    print("✅ Enhanced error handling and logging!")
+    print("🌐 Server running on: http://localhost:5000")
+    app.run(debug=True, host='0.0.0.0', port=5000)

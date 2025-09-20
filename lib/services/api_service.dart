@@ -127,7 +127,7 @@ class ApiService extends ChangeNotifier {
     dynamic imageData,
     String url,
   ) async {
-    var request = http.MultipartRequest('POST', Uri.parse('$url/analyze'));
+    var request = http.MultipartRequest('POST', Uri.parse('$url/predict_file'));
 
     if (kIsWeb && imageData is Uint8List) {
       // For web, use bytes
@@ -148,7 +148,14 @@ class ApiService extends ChangeNotifier {
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
-      return DetectionResult.fromJson(data);
+      
+      // Convert backend response to DetectionResult format
+      return DetectionResult(
+        hasParalysis: data['prediction'] == 1,
+        confidence: data['confidence'] ?? 0.5,
+        recommendation: data['description'] ?? 'Analysis completed',
+        timestamp: DateTime.now(),
+      );
     } else {
       throw Exception(
         'Server returned ${response.statusCode}: ${response.body}',

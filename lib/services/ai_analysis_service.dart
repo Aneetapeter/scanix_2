@@ -1,11 +1,15 @@
 import 'dart:io';
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
+import 'package:http/http.dart' as http;
 import '../models/detection_result.dart';
 
 class AIAnalysisService {
-  /// Analyze an image for facial paralysis using computer vision techniques
+  static const String _baseUrl = 'http://localhost:5000';
+  
+  /// Analyze an image for facial paralysis using real AI model
   static Future<DetectionResult> analyzeImage(dynamic imageData) async {
     try {
       // Read and process the image
@@ -19,13 +23,23 @@ class AIAnalysisService {
         throw Exception('Unsupported image data type');
       }
 
-      final image = img.decodeImage(imageBytes);
+      // Try to use real AI model first
+      try {
+        final result = await _callAIModel(imageBytes);
+        if (result != null) {
+          return result;
+        }
+      } catch (e) {
+        print('AI model call failed: $e');
+        // Fall back to local analysis
+      }
 
+      // Fallback to local analysis
+      final image = img.decodeImage(imageBytes);
       if (image == null) {
         throw Exception('Could not decode image');
       }
 
-      // Simulate AI analysis with more realistic results
       final analysisResult = await _performAIAnalysis(image);
 
       return DetectionResult(
@@ -37,6 +51,63 @@ class AIAnalysisService {
     } catch (e) {
       // Fallback to demo result if analysis fails
       return _generateFallbackResult();
+    }
+  }
+
+  /// Call the real AI model API
+  static Future<DetectionResult?> _callAIModel(Uint8List imageBytes) async {
+    try {
+      // Convert image to base64
+      final base64Image = base64Encode(imageBytes);
+      
+      // Make API call
+      final response = await http.post(
+        Uri.parse('$_baseUrl/predict'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'image': base64Image}),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        
+        return DetectionResult(
+          hasParalysis: data['prediction'] == 1,
+          confidence: data['confidence'] ?? 0.5,
+          recommendation: _generateRecommendationFromAI(data),
+          timestamp: DateTime.now(),
+        );
+      } else {
+        print('AI API error: ${response.statusCode} - ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('AI API call failed: $e');
+      return null;
+    }
+  }
+
+  /// Generate recommendation from AI model response
+  static String _generateRecommendationFromAI(Map<String, dynamic> data) {
+    final prediction = data['prediction'] as int;
+    final confidence = data['confidence'] as double;
+    final probabilities = data['probabilities'] as Map<String, dynamic>;
+    final normalProb = probabilities['normal'] as double;
+    final paralysisProb = probabilities['paralysis'] as double;
+    
+    if (prediction == 1) { // Paralysis detected
+      if (confidence > 0.8) {
+        return "🔴 HIGH CONFIDENCE: AI detected significant facial asymmetry (${(paralysisProb * 100).toStringAsFixed(1)}% confidence). This suggests possible facial paralysis. Please consult a neurologist immediately for proper evaluation and treatment. Early intervention is crucial for the best outcomes.";
+      } else if (confidence > 0.6) {
+        return "🟡 MODERATE CONFIDENCE: AI detected facial asymmetry (${(paralysisProb * 100).toStringAsFixed(1)}% confidence). We recommend consulting a healthcare professional for further evaluation and monitoring. Consider seeking medical attention if symptoms persist.";
+      } else {
+        return "🟠 LOW CONFIDENCE: AI detected mild facial asymmetry (${(paralysisProb * 100).toStringAsFixed(1)}% confidence). Consider consulting a healthcare professional if symptoms persist or worsen. Monitor for any changes in facial movement.";
+      }
+    } else { // Normal
+      if (confidence > 0.8) {
+        return "✅ HIGH CONFIDENCE: AI detected good facial symmetry (${(normalProb * 100).toStringAsFixed(1)}% confidence). No signs of facial paralysis detected. Continue regular health monitoring and consult a healthcare professional if you notice any changes in facial movement.";
+      } else {
+        return "✅ NORMAL: AI detected no clear signs of facial paralysis (${(normalProb * 100).toStringAsFixed(1)}% confidence). If you have concerns about facial symmetry or movement, please consult a healthcare professional for peace of mind.";
+      }
     }
   }
 

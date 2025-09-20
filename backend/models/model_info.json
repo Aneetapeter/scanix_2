@@ -1,7 +1,22 @@
 {
   "model_type": "RandomForestClassifier",
-  "feature_count": 1024,
-  "n_estimators": 50,
-  "accuracy": 0.9375,
-  "training_date": "2025-09-20"
+  "image_size": [
+    64,
+    64
+  ],
+  "feature_count": 4360,
+  "n_estimators": 200,
+  "accuracy": 0.9340659340659341,
+  "training_date": "2025-09-20T13:17:03.162379",
+  "total_images": 455,
+  "normal_images": 230,
+  "paralysis_images": 225,
+  "improvements": [
+    "Enhanced feature extraction",
+    "Class balancing",
+    "Feature scaling",
+    "Improved model parameters",
+    "Asymmetry detection",
+    "Texture analysis"
+  ]
 }

@@ -1,35 +1,27 @@
 #!/bin/bash
+echo "Starting Scanix AI System..."
+echo
 
-echo "Starting Scanix AI Application..."
-
-# Start Backend
-echo "Starting backend server..."
-(cd backend && python improved_main.py) &
+echo "Starting Backend Server..."
+cd backend
+python app.py &
 BACKEND_PID=$!
-echo "Backend PID: $BACKEND_PID"
 
-# Wait a moment for the backend to initialize
-echo "Waiting for backend to initialize (5 seconds)..."
-sleep 5
+echo "Waiting for backend to start..."
+sleep 3
 
-# Start Frontend
-echo "Starting Flutter frontend..."
+echo "Starting Flutter App..."
+cd ..
 flutter run &
-FRONTEND_PID=$!
-echo "Frontend PID: $FRONTEND_PID"
+FLUTTER_PID=$!
 
-echo "Scanix AI Application started. Press Ctrl+C to stop both."
+echo
+echo "Scanix AI System is running..."
+echo "Backend: http://localhost:5000"
+echo "Frontend: Will open automatically"
+echo
+echo "Press Ctrl+C to stop both services"
 
-# Function to kill background processes on exit
-cleanup() {
-  echo "Stopping backend (PID: $BACKEND_PID) and frontend (PID: $FRONTEND_PID)..."
-  kill $BACKEND_PID
-  kill $FRONTEND_PID
-  echo "Processes stopped."
-}
-
-# Trap Ctrl+C and call cleanup function
-trap cleanup SIGINT
-
-wait $BACKEND_PID
-wait $FRONTEND_PID
+# Wait for user interrupt
+trap "kill $BACKEND_PID $FLUTTER_PID; exit" INT
+wait
