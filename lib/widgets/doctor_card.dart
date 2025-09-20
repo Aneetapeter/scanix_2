@@ -24,7 +24,7 @@ class DoctorCard extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 30,
-                  backgroundColor: const Color(0xFF1E3A8A).withOpacity(0.1),
+                  backgroundColor: const Color(0xFF1E3A8A).withValues(alpha: 0.1),
                   backgroundImage: NetworkImage(doctor.imageUrl),
                   child: doctor.imageUrl.isEmpty
                       ? const Icon(Icons.person, color: Color(0xFF1E3A8A))

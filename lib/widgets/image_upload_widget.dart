@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../services/image_service.dart';
@@ -12,11 +13,16 @@ class ImageUploadWidget extends StatelessWidget {
       builder: (context, imageService, child) {
         return Card(
           elevation: 4,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Container(
             height: 300,
             padding: const EdgeInsets.all(24),
-            child: imageService.selectedImage != null
+            child:
+                (kIsWeb
+                    ? imageService.selectedImageBytes != null
+                    : imageService.selectedImage != null)
                 ? _buildImagePreview(context, imageService)
                 : _buildUploadOptions(context, imageService),
           ),
@@ -36,7 +42,7 @@ class ImageUploadWidget extends StatelessWidget {
               border: Border.all(color: const Color(0xFFE5E7EB)),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withValues(alpha: 0.1),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -44,12 +50,30 @@ class ImageUploadWidget extends StatelessWidget {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Image.file(
-                imageService.selectedImage!,
-                fit: BoxFit.contain, // Changed from cover to contain to show full image
-                width: double.infinity,
-                height: double.infinity,
-              ),
+              child: kIsWeb
+                  ? (imageService.selectedImageBytes != null
+                        ? Image.memory(
+                            imageService.selectedImageBytes!,
+                            fit: BoxFit.contain,
+                            width: double.infinity,
+                            height: double.infinity,
+                          )
+                        : Container(
+                            color: Colors.grey[200],
+                            child: const Center(
+                              child: Icon(
+                                Icons.image,
+                                size: 50,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ))
+                  : Image.file(
+                      imageService.selectedImage!,
+                      fit: BoxFit.contain,
+                      width: double.infinity,
+                      height: double.infinity,
+                    ),
             ),
           ),
         ),
@@ -102,11 +126,7 @@ class ImageUploadWidget extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Icon(
-          Icons.cloud_upload,
-          size: 64,
-          color: Color(0xFF6B7280),
-        ),
+        const Icon(Icons.cloud_upload, size: 64, color: Color(0xFF6B7280)),
         const SizedBox(height: 16),
         const Text(
           'Upload an Image',
@@ -119,10 +139,7 @@ class ImageUploadWidget extends StatelessWidget {
         const SizedBox(height: 8),
         const Text(
           'Choose from gallery or capture with camera',
-          style: TextStyle(
-            fontSize: 14,
-            color: Color(0xFF6B7280),
-          ),
+          style: TextStyle(fontSize: 14, color: Color(0xFF6B7280)),
         ),
         const SizedBox(height: 32),
         Row(
@@ -163,10 +180,7 @@ class ImageUploadWidget extends StatelessWidget {
         const SizedBox(height: 16),
         Text(
           'Supported formats: JPG, PNG, WEBP',
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[600],
-          ),
+          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
         ),
       ],
     );

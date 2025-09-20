@@ -35,23 +35,25 @@ class _ContactScreenState extends State<ContactScreen> {
       message: _messageController.text,
     );
 
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Message sent successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      _nameController.clear();
-      _emailController.clear();
-      _messageController.clear();
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(apiService.error ?? 'Failed to send message'),
-          backgroundColor: Colors.red,
-        ),
-      );
+    if (mounted) {
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Message sent successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _nameController.clear();
+        _emailController.clear();
+        _messageController.clear();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(apiService.error ?? 'Failed to send message'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -331,7 +333,7 @@ class _ContactScreenState extends State<ContactScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFF1E3A8A).withOpacity(0.1),
+                color: const Color(0xFF1E3A8A).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(icon, color: const Color(0xFF1E3A8A), size: 20),
@@ -372,7 +374,7 @@ class _ContactScreenState extends State<ContactScreen> {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: const Color(0xFF1E3A8A).withOpacity(0.1),
+          color: const Color(0xFF1E3A8A).withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(icon, color: const Color(0xFF1E3A8A), size: 20),

@@ -31,11 +31,11 @@ class LoadingButton extends StatelessWidget {
           backgroundColor: backgroundColor,
           foregroundColor: textColor ?? Colors.white,
           elevation: 2,
-          shadowColor: backgroundColor.withOpacity(0.3),
+          shadowColor: backgroundColor.withValues(alpha: 0.3),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          disabledBackgroundColor: backgroundColor.withOpacity(0.6),
+          disabledBackgroundColor: backgroundColor.withValues(alpha: 0.6),
         ),
         child: isLoading
             ? SizedBox(

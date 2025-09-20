@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -7,16 +7,24 @@ import 'package:permission_handler/permission_handler.dart';
 class ImageService extends ChangeNotifier {
   final ImagePicker _picker = ImagePicker();
   File? _selectedImage;
+  Uint8List? _selectedImageBytes;
   List<CameraDescription>? _cameras;
   CameraController? _cameraController;
   bool _isCameraInitialized = false;
 
   File? get selectedImage => _selectedImage;
+  Uint8List? get selectedImageBytes => _selectedImageBytes;
   List<CameraDescription>? get cameras => _cameras;
   CameraController? get cameraController => _cameraController;
   bool get isCameraInitialized => _isCameraInitialized;
 
   Future<bool> initializeCamera() async {
+    // Camera is not supported on web
+    if (kIsWeb) {
+      debugPrint('Camera not supported on web');
+      return false;
+    }
+
     try {
       // Check camera permission
       final status = await Permission.camera.status;
@@ -55,9 +63,18 @@ class ImageService extends ChangeNotifier {
         maxHeight: 1024,
         imageQuality: 85,
       );
-      
+
       if (image != null) {
-        _selectedImage = File(image.path);
+        if (kIsWeb) {
+          // For web, read the image as bytes
+          final bytes = await image.readAsBytes();
+          _selectedImageBytes = Uint8List.fromList(bytes);
+          _selectedImage = null;
+        } else {
+          // For mobile/desktop, use File
+          _selectedImage = File(image.path);
+          _selectedImageBytes = null;
+        }
         notifyListeners();
       }
     } catch (e) {
@@ -66,13 +83,21 @@ class ImageService extends ChangeNotifier {
   }
 
   Future<void> captureImageFromCamera() async {
+    // Camera is not supported on web
+    if (kIsWeb) {
+      debugPrint('Camera capture not supported on web');
+      return;
+    }
+
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
       return;
     }
 
     try {
       final XFile image = await _cameraController!.takePicture();
+      // For mobile/desktop, use File
       _selectedImage = File(image.path);
+      _selectedImageBytes = null;
       notifyListeners();
     } catch (e) {
       debugPrint('Error capturing image: $e');
@@ -81,6 +106,7 @@ class ImageService extends ChangeNotifier {
 
   void clearSelectedImage() {
     _selectedImage = null;
+    _selectedImageBytes = null;
     notifyListeners();
   }
 

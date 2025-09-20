@@ -27,15 +27,18 @@ class _CameraScreenState extends State<CameraScreen> {
       // Request camera permission
       final status = await Permission.camera.request();
       if (status != PermissionStatus.granted) {
-        setState(() {
-          _error = 'Camera permission is required to take photos';
-          _isInitializing = false;
-        });
+        if (mounted) {
+          setState(() {
+            _error = 'Camera permission is required to take photos';
+            _isInitializing = false;
+          });
+        }
         return;
       }
 
       // Initialize camera
-      await context.read<ImageService>().initializeCamera();
+      final imageService = Provider.of<ImageService>(context, listen: false);
+      await imageService.initializeCamera();
 
       if (mounted) {
         setState(() {
@@ -175,7 +178,7 @@ class _CameraScreenState extends State<CameraScreen> {
                       end: Alignment.bottomCenter,
                       colors: [
                         Colors.transparent,
-                        Colors.black.withOpacity(0.7),
+                        Colors.black.withValues(alpha: 0.7),
                       ],
                     ),
                   ),
@@ -187,7 +190,7 @@ class _CameraScreenState extends State<CameraScreen> {
                         onPressed: () async {
                           await imageService.pickImageFromGallery();
                           if (mounted) {
-                            context.pop();
+                            Navigator.of(context).pop();
                           }
                         },
                         icon: const Icon(
@@ -219,7 +222,8 @@ class _CameraScreenState extends State<CameraScreen> {
                       // Switch Camera Button
                       IconButton(
                         onPressed: () {
-                          // TODO: Implement camera switching
+                          // Camera switching functionality can be added here
+                          // For now, this is a placeholder
                         },
                         icon: const Icon(
                           Icons.flip_camera_ios,
@@ -240,7 +244,7 @@ class _CameraScreenState extends State<CameraScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
+                    color: Colors.black.withValues(alpha: 0.6),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Text(

@@ -43,6 +43,7 @@ dependencies:
   image_picker: ^1.0.7
   camera: ^0.10.5+9
   path_provider: ^2.1.2
+  image: ^4.1.7
   
   # HTTP requests
   http: ^1.2.1

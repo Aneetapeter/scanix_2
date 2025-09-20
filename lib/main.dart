@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import 'screens/home_screen.dart';
-import 'screens/detection_screen.dart';
+import 'screens/modern_home_screen.dart';
+import 'screens/enhanced_detection_screen.dart';
 import 'screens/about_screen.dart';
 import 'screens/doctors_screen.dart';
 import 'screens/how_it_works_screen.dart';
@@ -53,12 +53,12 @@ final GoRouter _router = GoRouter(
     GoRoute(
       path: '/',
       name: 'home',
-      builder: (context, state) => const HomeScreen(),
+      builder: (context, state) => const ModernHomeScreen(),
     ),
     GoRoute(
       path: '/detection',
       name: 'detection',
-      builder: (context, state) => const DetectionScreen(),
+      builder: (context, state) => const EnhancedDetectionScreen(),
     ),
     GoRoute(
       path: '/about',

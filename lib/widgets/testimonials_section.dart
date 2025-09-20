@@ -99,7 +99,7 @@ class TestimonialsSection extends StatelessWidget {
               Row(
                 children: [
                   CircleAvatar(
-                    backgroundColor: const Color(0xFF1E3A8A).withOpacity(0.1),
+                    backgroundColor: const Color(0xFF1E3A8A).withValues(alpha: 0.1),
                     child: const Icon(
                       Icons.person,
                       color: Color(0xFF1E3A8A),

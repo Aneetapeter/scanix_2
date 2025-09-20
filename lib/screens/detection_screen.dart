@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../services/api_service.dart';
 import '../services/image_service.dart';
-import '../services/demo_service.dart';
 import '../models/detection_result.dart';
 import '../widgets/image_upload_widget.dart';
 import '../widgets/result_display_widget.dart';
-
-import '../widgets/professional_loading.dart';
+import '../utils/app_theme.dart';
 import '../widgets/professional_card.dart';
+import '../widgets/professional_loading.dart';
 
 class DetectionScreen extends StatefulWidget {
   const DetectionScreen({super.key});
@@ -21,6 +21,7 @@ class DetectionScreen extends StatefulWidget {
 class _DetectionScreenState extends State<DetectionScreen> {
   DetectionResult? _result;
   bool _isAnalyzing = false;
+  // Animation controllers removed as they're not used in this simplified version
 
   @override
   void initState() {
@@ -40,10 +41,20 @@ class _DetectionScreenState extends State<DetectionScreen> {
     final imageService = context.read<ImageService>();
     final apiService = context.read<ApiService>();
 
-    if (imageService.selectedImage == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select an image first')),
+    if (kDebugMode) {
+      debugPrint('🔍 Starting image analysis...');
+      debugPrint('Selected image: ${imageService.selectedImage}');
+      debugPrint(
+        'Selected image bytes: ${imageService.selectedImageBytes != null ? "Available" : "null"}',
       );
+    }
+
+    if (imageService.selectedImage == null &&
+        imageService.selectedImageBytes == null) {
+      if (kDebugMode) {
+        debugPrint('❌ No image selected');
+      }
+      _showErrorSnackBar('Please select an image first');
       return;
     }
 
@@ -52,29 +63,50 @@ class _DetectionScreenState extends State<DetectionScreen> {
       _result = null;
     });
 
-    // Try real API first
-    DetectionResult? result = await apiService.analyzeImage(imageService.selectedImage!);
-    
-    // If API fails, use demo mode
-    if (result == null) {
-      // Simulate processing delay
-      await Future.delayed(const Duration(seconds: 2));
-      result = DemoService.generateDemoResult();
-      
-      // Show demo mode warning
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Demo Mode: Using simulated AI analysis. Backend server not available.'),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 3),
-        ),
-      );
+    try {
+      // Try real API first - pass the appropriate image data
+      dynamic imageData =
+          imageService.selectedImageBytes ?? imageService.selectedImage;
+      if (kDebugMode) {
+        debugPrint('📤 Sending image data to API: ${imageData.runtimeType}');
+      }
+      DetectionResult? result = await apiService.analyzeImage(imageData);
+      if (kDebugMode) {
+        debugPrint(
+          '📥 Received result: ${result != null ? "Success" : "null"}',
+        );
+      }
+
+      setState(() {
+        _isAnalyzing = false;
+        _result = result;
+      });
+    } catch (e) {
+      setState(() {
+        _isAnalyzing = false;
+      });
+
+      if (mounted) {
+        _showErrorSnackBar('Analysis failed: $e');
+      }
     }
-    
-    setState(() {
-      _isAnalyzing = false;
-      _result = result;
-    });
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: AppTheme.errorRed,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
   }
 
   @override
@@ -98,14 +130,18 @@ class _DetectionScreenState extends State<DetectionScreen> {
               iconColor: const Color(0xFF0F172A),
               child: const ImageUploadWidget(),
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // Analyze Button
             Consumer<ImageService>(
               builder: (context, imageService, child) {
                 return ElevatedButton(
-                  onPressed: imageService.selectedImage != null && !_isAnalyzing
+                  onPressed:
+                      (kIsWeb
+                              ? imageService.selectedImageBytes != null
+                              : imageService.selectedImage != null) &&
+                          !_isAnalyzing
                       ? _analyzeImage
                       : null,
                   style: ElevatedButton.styleFrom(
@@ -124,7 +160,9 @@ class _DetectionScreenState extends State<DetectionScreen> {
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
                               ),
                             ),
                             SizedBox(width: 12),
@@ -141,25 +179,25 @@ class _DetectionScreenState extends State<DetectionScreen> {
                 );
               },
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // Professional Loading
-            if (_isAnalyzing) 
+            if (_isAnalyzing)
               const Center(
                 child: ProfessionalLoading(
                   message: 'Analyzing Image',
                   size: 60,
                 ),
               ),
-            
+
             const SizedBox(height: 24),
-            
+
             // Results Section
             if (_result != null) ResultDisplayWidget(result: _result!),
-            
+
             const SizedBox(height: 32),
-            
+
             // Action Buttons
             if (_result != null) ...[
               Row(

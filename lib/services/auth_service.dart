@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 
@@ -27,17 +27,19 @@ class AuthService extends ChangeNotifier {
     _setLoading(true);
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       // Initialize demo data if not exists
       await _initializeDemoData(prefs);
-      
+
       final userJson = prefs.getString('current_user');
       if (userJson != null) {
         final userData = json.decode(userJson);
         _currentUser = User.fromJson(userData);
       }
     } catch (e) {
-      print('Error initializing auth: $e');
+      if (kDebugMode) {
+        debugPrint('Error initializing auth: $e');
+      }
     } finally {
       _setLoading(false);
     }
@@ -67,7 +69,7 @@ class AuthService extends ChangeNotifier {
           'role': 'doctor',
         },
       ];
-      
+
       await prefs.setString('users', json.encode(demoUsers));
     }
   }
@@ -126,10 +128,7 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<bool> signIn({
-    required String email,
-    required String password,
-  }) async {
+  Future<bool> signIn({required String email, required String password}) async {
     _setLoading(true);
     _setError(null);
 
@@ -147,7 +146,7 @@ class AuthService extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final usersJson = prefs.getString('users') ?? '[]';
       final List<dynamic> usersData = json.decode(usersJson);
-      
+
       final userData = usersData.firstWhere(
         (user) => user['email'] == email && user['password'] == password,
         orElse: () => null,
@@ -184,7 +183,9 @@ class AuthService extends ChangeNotifier {
       _currentUser = null;
       notifyListeners();
     } catch (e) {
-      print('Error signing out: $e');
+      if (kDebugMode) {
+        debugPrint('Error signing out: $e');
+      }
     } finally {
       _setLoading(false);
     }
@@ -197,22 +198,22 @@ class AuthService extends ChangeNotifier {
 
   Future<void> _saveUserWithPassword(User user, String password) async {
     final prefs = await SharedPreferences.getInstance();
-    
+
     // Save current user
     await prefs.setString('current_user', json.encode(user.toJson()));
-    
+
     // Save to users list with password
     final usersJson = prefs.getString('users') ?? '[]';
     final List<dynamic> usersData = json.decode(usersJson);
-    
+
     // Remove existing user with same email
     usersData.removeWhere((u) => u['email'] == user.email);
-    
+
     // Add new user
     final userData = user.toJson();
     userData['password'] = password;
     usersData.add(userData);
-    
+
     await prefs.setString('users', json.encode(usersData));
   }
 
@@ -220,10 +221,7 @@ class AuthService extends ChangeNotifier {
     return RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email);
   }
 
-  Future<void> updateProfile({
-    String? name,
-    String? phone,
-  }) async {
+  Future<void> updateProfile({String? name, String? phone}) async {
     if (_currentUser == null) return;
 
     _setLoading(true);
@@ -232,7 +230,7 @@ class AuthService extends ChangeNotifier {
         name: name ?? _currentUser!.name,
         phone: phone ?? _currentUser!.phone,
       );
-      
+
       await _saveUser(_currentUser!);
       notifyListeners();
     } catch (e) {

@@ -8,29 +8,36 @@ import os
 import base64
 from datetime import datetime
 import json
+from model_inference import get_detector, predict_facial_paralysis
+from optimized_inference import get_optimized_detector, predict_facial_paralysis_fast
 
 app = Flask(__name__)
 CORS(app)
 
 # Global variables for the model
-model = None
 model_loaded = False
+detector = None
 
 def load_model():
-    """Load the CNN model for facial paralysis detection"""
-    global model, model_loaded
+    """Load the trained CNN model for facial paralysis detection"""
+    global model_loaded, detector
     try:
-        # For demo purposes, we'll create a simple model
-        # In production, you would load a pre-trained model
-        model = create_demo_model()
-        model_loaded = True
-        print("Model loaded successfully")
+        # Try to load the trained model
+        detector = get_detector()
+        if detector.is_model_loaded():
+            model_loaded = True
+            print("Trained model loaded successfully")
+        else:
+            # Fallback to demo model if trained model not available
+            detector = None
+            model_loaded = False
+            print("Trained model not available, using demo model")
     except Exception as e:
         print(f"Error loading model: {e}")
         model_loaded = False
 
 def create_demo_model():
-    """Create a demo CNN model for facial paralysis detection"""
+    """Create a demo CNN model for facial paralysis detection (fallback)"""
     model = tf.keras.Sequential([
         tf.keras.layers.Conv2D(32, (3, 3), activation='relu', input_shape=(224, 224, 3)),
         tf.keras.layers.MaxPooling2D(2, 2),
@@ -82,13 +89,28 @@ def preprocess_image(image_path):
         return None
 
 def detect_facial_paralysis(image_path):
-    """Detect facial paralysis using the CNN model"""
-    global model, model_loaded
-    
-    if not model_loaded:
-        return None
-    
+    """Detect facial paralysis using the optimized model"""
     try:
+        # Use optimized model for fast prediction
+        result = predict_facial_paralysis_fast(image_path)
+        
+        # Add timestamp if not present
+        if 'timestamp' not in result:
+            result['timestamp'] = datetime.now().isoformat()
+        
+        return result
+    
+    except Exception as e:
+        print(f"Error in facial paralysis detection: {e}")
+        # Fallback to demo model
+        return detect_with_demo_model(image_path)
+
+def detect_with_demo_model(image_path):
+    """Fallback detection using demo model"""
+    try:
+        # Create demo model
+        model = create_demo_model()
+        
         # Preprocess image
         processed_image = preprocess_image(image_path)
         if processed_image is None:
@@ -117,11 +139,12 @@ def detect_facial_paralysis(image_path):
             'has_paralysis': has_paralysis,
             'confidence': confidence,
             'recommendation': recommendation,
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.now().isoformat(),
+            'model_type': 'demo'
         }
     
     except Exception as e:
-        print(f"Error in facial paralysis detection: {e}")
+        print(f"Error in demo model detection: {e}")
         return None
 
 @app.route('/analyze', methods=['POST'])
