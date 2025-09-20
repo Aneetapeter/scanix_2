@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Final Scanix Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .test-section { margin: 20px 0; padding: 20px; background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .success { color: #10b981; font-weight: bold; }
+        .error { color: #ef4444; font-weight: bold; }
+        .info { color: #3b82f6; font-weight: bold; }
+        .warning { color: #f59e0b; font-weight: bold; }
+        .status { margin: 10px 0; padding: 15px; border-radius: 8px; }
+        .success-bg { background: #d1fae5; border: 1px solid #10b981; }
+        .error-bg { background: #fee2e2; border: 1px solid #ef4444; }
+        .info-bg { background: #dbeafe; border: 1px solid #3b82f6; }
+        .warning-bg { background: #fef3c7; border: 1px solid #f59e0b; }
+        button { padding: 12px 20px; margin: 8px; cursor: pointer; border: none; border-radius: 8px; font-weight: 600; }
+        .btn-primary { background: #1e3a8a; color: white; }
+        .btn-secondary { background: #6b7280; color: white; }
+        .btn-success { background: #10b981; color: white; }
+        input[type="file"] { margin: 10px 0; padding: 10px; border: 2px dashed #d1d5db; border-radius: 8px; width: 100%; }
+        #imagePreview { max-width: 300px; max-height: 300px; margin: 10px 0; border-radius: 8px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .full-width { grid-column: 1 / -1; }
+        .step { margin: 10px 0; padding: 10px; background: #f9fafb; border-left: 4px solid #1e3a8a; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Final Scanix Application Test</h1>
+        <p>This comprehensive test will verify that your facial paralysis detection app is working correctly.</p>
+        
+        <div class="grid">
+            <div class="test-section">
+                <h2>1. Backend Status</h2>
+                <button onclick="checkBackend()" class="btn-primary">Check Backend</button>
+                <div id="backendStatus" class="status"></div>
+            </div>
+            
+            <div class="test-section">
+                <h2>2. Flutter App Status</h2>
+                <button onclick="checkFlutterApp()" class="btn-primary">Check Flutter App</button>
+                <div id="flutterStatus" class="status"></div>
+            </div>
+        </div>
+        
+        <div class="test-section full-width">
+            <h2>3. AI Analysis Test</h2>
+            <div class="step">
+                <strong>Step 1:</strong> Upload an image using the file input below
+            </div>
+            <input type="file" id="imageFile" accept="image/*" onchange="handleImageSelect()">
+            <div id="imageInfo"></div>
+            <div id="imagePreview"></div>
+            
+            <div class="step">
+                <strong>Step 2:</strong> Test the analysis functionality
+            </div>
+            <button onclick="testAnalysis()" id="analyzeBtn" disabled class="btn-success">Test AI Analysis</button>
+            <div id="analysisResult" class="status"></div>
+        </div>
+        
+        <div class="test-section full-width">
+            <h2>4. Flutter App Testing Instructions</h2>
+            <div class="step">
+                <strong>Step 1:</strong> Open the Flutter app at <a href="http://localhost:3000" target="_blank">http://localhost:3000</a>
+            </div>
+            <div class="step">
+                <strong>Step 2:</strong> Navigate to the detection/analysis screen
+            </div>
+            <div class="step">
+                <strong>Step 3:</strong> Upload an image using the "Gallery" button
+            </div>
+            <div class="step">
+                <strong>Step 4:</strong> Click "Analyze Image" button
+            </div>
+            <div class="step">
+                <strong>Step 5:</strong> Check if results are displayed correctly
+            </div>
+            <div class="step">
+                <strong>Step 6:</strong> Open browser console (F12) and check for any errors
+            </div>
+        </div>
+        
+        <div class="test-section full-width">
+            <h2>5. Expected Results</h2>
+            <div class="step">
+                ✅ <strong>Backend:</strong> Should show "healthy" status with model loaded
+            </div>
+            <div class="step">
+                ✅ <strong>Flutter App:</strong> Should load without errors and show the interface
+            </div>
+            <div class="step">
+                ✅ <strong>Image Upload:</strong> Should work and show image preview
+            </div>
+            <div class="step">
+                ✅ <strong>Analysis:</strong> Should return results with confidence score and recommendation
+            </div>
+            <div class="step">
+                ✅ <strong>No Errors:</strong> No console errors or app crashes
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedFile = null;
+        
+        async function checkBackend() {
+            const statusDiv = document.getElementById('backendStatus');
+            statusDiv.innerHTML = '<div class="info-bg">🔄 Checking backend...</div>';
+            
+            try {
+                const response = await fetch('http://localhost:5000/health');
+                const data = await response.json();
+                statusDiv.innerHTML = `<div class="success-bg">✅ Backend is running!<br>
+                    Status: ${data.status}<br>
+                    Model Loaded: ${data.model_loaded}<br>
+                    Timestamp: ${data.timestamp}</div>`;
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="error-bg">❌ Backend Error: ${error.message}</div>`;
+            }
+        }
+        
+        async function checkFlutterApp() {
+            const statusDiv = document.getElementById('flutterStatus');
+            statusDiv.innerHTML = '<div class="info-bg">🔄 Checking Flutter app...</div>';
+            
+            try {
+                const response = await fetch('http://localhost:3000');
+                if (response.ok) {
+                    statusDiv.innerHTML = '<div class="success-bg">✅ Flutter app is running!<br>You can access it at: <a href="http://localhost:3000" target="_blank">http://localhost:3000</a></div>';
+                } else {
+                    statusDiv.innerHTML = `<div class="error-bg">❌ Flutter app error: ${response.status} ${response.statusText}</div>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="error-bg">❌ Flutter app error: ${error.message}</div>`;
+            }
+        }
+        
+        function handleImageSelect() {
+            const fileInput = document.getElementById('imageFile');
+            const previewDiv = document.getElementById('imagePreview');
+            const infoDiv = document.getElementById('imageInfo');
+            const analyzeBtn = document.getElementById('analyzeBtn');
+            
+            if (fileInput.files[0]) {
+                selectedFile = fileInput.files[0];
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    previewDiv.innerHTML = `<img src="${e.target.result}" id="previewImg" style="max-width: 300px; max-height: 300px; border-radius: 8px;">`;
+                };
+                reader.readAsDataURL(selectedFile);
+                
+                infoDiv.innerHTML = `<div class="success-bg">✅ Image selected:<br>
+                    Name: ${selectedFile.name}<br>
+                    Size: ${(selectedFile.size / 1024).toFixed(2)} KB<br>
+                    Type: ${selectedFile.type}</div>`;
+                analyzeBtn.disabled = false;
+            } else {
+                selectedFile = null;
+                previewDiv.innerHTML = '';
+                infoDiv.innerHTML = '';
+                analyzeBtn.disabled = true;
+            }
+        }
+        
+        async function testAnalysis() {
+            const resultDiv = document.getElementById('analysisResult');
+            const analyzeBtn = document.getElementById('analyzeBtn');
+            
+            if (!selectedFile) {
+                resultDiv.innerHTML = '<div class="error-bg">❌ Please select an image first</div>';
+                return;
+            }
+            
+            analyzeBtn.disabled = true;
+            analyzeBtn.textContent = 'Analyzing...';
+            resultDiv.innerHTML = '<div class="info-bg">🔄 Testing AI analysis...</div>';
+            
+            try {
+                const formData = new FormData();
+                formData.append('image', selectedFile);
+                
+                const response = await fetch('http://localhost:5000/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    resultDiv.innerHTML = `<div class="success-bg">✅ AI Analysis Successful!<br>
+                        <strong>Has Paralysis:</strong> ${result.has_paralysis ? 'Yes' : 'No'}<br>
+                        <strong>Confidence:</strong> ${(result.confidence * 100).toFixed(1)}%<br>
+                        <strong>Recommendation:</strong> ${result.recommendation}<br>
+                        <strong>Model Type:</strong> ${result.model_type}<br>
+                        <strong>Timestamp:</strong> ${result.timestamp}</div>`;
+                } else {
+                    const errorText = await response.text();
+                    resultDiv.innerHTML = `<div class="error-bg">❌ Analysis Failed (${response.status}):<br>
+                        ${errorText}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error-bg">❌ Network Error: ${error.message}</div>`;
+            } finally {
+                analyzeBtn.disabled = false;
+                analyzeBtn.textContent = 'Test AI Analysis';
+            }
+        }
+        
+        // Auto-check on page load
+        window.onload = function() {
+            checkBackend();
+            checkFlutterApp();
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Flutter App Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        .warning { color: orange; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        .status { margin: 10px 0; padding: 10px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Flutter App Analysis Test</h1>
+    
+    <div class="test-section">
+        <h2>1. Backend Status</h2>
+        <button onclick="checkBackend()">Check Backend</button>
+        <div id="backendStatus" class="status"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>2. Flutter App Status</h2>
+        <button onclick="checkFlutterApp()">Check Flutter App</button>
+        <div id="flutterStatus" class="status"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>3. Direct Analysis Test</h2>
+        <input type="file" id="imageFile" accept="image/*" onchange="handleImageSelect()">
+        <div id="imageInfo"></div>
+        <button onclick="testAnalysis()" id="analyzeBtn" disabled>Test Analysis</button>
+        <div id="analysisResult" class="status"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>4. Flutter App Instructions</h2>
+        <p><strong>Step 1:</strong> Open <a href="http://localhost:3000" target="_blank">http://localhost:3000</a></p>
+        <p><strong>Step 2:</strong> Navigate to the detection/analysis screen</p>
+        <p><strong>Step 3:</strong> Try to upload an image using the "Gallery" button</p>
+        <p><strong>Step 4:</strong> Check if the "Analyze Image" button is enabled</p>
+        <p><strong>Step 5:</strong> Click "Analyze Image" and check for errors</p>
+        <p><strong>Step 6:</strong> Open browser console (F12) and look for error messages</p>
+    </div>
+
+    <script>
+        let selectedFile = null;
+        
+        async function checkBackend() {
+            const statusDiv = document.getElementById('backendStatus');
+            statusDiv.innerHTML = '<div class="info">🔄 Checking backend...</div>';
+            
+            try {
+                const response = await fetch('http://localhost:5000/health');
+                const data = await response.json();
+                statusDiv.innerHTML = `<div class="success">✅ Backend is running!<br>
+                    Status: ${data.status}<br>
+                    Model Loaded: ${data.model_loaded}<br>
+                    Timestamp: ${data.timestamp}</div>`;
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="error">❌ Backend Error: ${error.message}</div>`;
+            }
+        }
+        
+        async function checkFlutterApp() {
+            const statusDiv = document.getElementById('flutterStatus');
+            statusDiv.innerHTML = '<div class="info">🔄 Checking Flutter app...</div>';
+            
+            try {
+                const response = await fetch('http://localhost:3000');
+                if (response.ok) {
+                    statusDiv.innerHTML = '<div class="success">✅ Flutter app is running!<br>You can access it at: <a href="http://localhost:3000" target="_blank">http://localhost:3000</a></div>';
+                } else {
+                    statusDiv.innerHTML = `<div class="error">❌ Flutter app error: ${response.status} ${response.statusText}</div>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="error">❌ Flutter app error: ${error.message}</div>`;
+            }
+        }
+        
+        function handleImageSelect() {
+            const fileInput = document.getElementById('imageFile');
+            const infoDiv = document.getElementById('imageInfo');
+            const analyzeBtn = document.getElementById('analyzeBtn');
+            
+            if (fileInput.files[0]) {
+                selectedFile = fileInput.files[0];
+                infoDiv.innerHTML = `<div class="success">✅ Image selected:<br>
+                    Name: ${selectedFile.name}<br>
+                    Size: ${selectedFile.size} bytes<br>
+                    Type: ${selectedFile.type}</div>`;
+                analyzeBtn.disabled = false;
+            } else {
+                selectedFile = null;
+                infoDiv.innerHTML = '';
+                analyzeBtn.disabled = true;
+            }
+        }
+        
+        async function testAnalysis() {
+            const resultDiv = document.getElementById('analysisResult');
+            const analyzeBtn = document.getElementById('analyzeBtn');
+            
+            if (!selectedFile) {
+                resultDiv.innerHTML = '<div class="error">❌ Please select an image first</div>';
+                return;
+            }
+            
+            analyzeBtn.disabled = true;
+            analyzeBtn.textContent = 'Analyzing...';
+            resultDiv.innerHTML = '<div class="info">🔄 Testing analysis...</div>';
+            
+            try {
+                const formData = new FormData();
+                formData.append('image', selectedFile);
+                
+                const response = await fetch('http://localhost:5000/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    resultDiv.innerHTML = `<div class="success">✅ Analysis Test Successful!<br>
+                        <strong>Result:</strong> ${result.result}<br>
+                        <strong>Confidence:</strong> ${result.confidence}%<br>
+                        <strong>Recommendation:</strong> ${result.recommendation}<br><br>
+                        <div class="warning">⚠️ If this works but Flutter doesn't, the issue is in the Flutter app code.</div></div>`;
+                } else {
+                    const errorText = await response.text();
+                    resultDiv.innerHTML = `<div class="error">❌ Analysis Test Failed (${response.status}):<br>
+                        ${errorText}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Network Error: ${error.message}</div>`;
+            } finally {
+                analyzeBtn.disabled = false;
+                analyzeBtn.textContent = 'Test Analysis';
+            }
+        }
+        
+        // Auto-check on page load
+        window.onload = function() {
+            checkBackend();
+            checkFlutterApp();
+        };
+    </script>
+</body>
+</html>

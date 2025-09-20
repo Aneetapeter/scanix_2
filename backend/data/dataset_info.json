@@ -1,0 +1,27 @@
+{
+  "dataset_name": "Facial Paralysis Detection Dataset",
+  "source": "LFW Normal Faces + Stroke Paralysis Faces",
+  "total_images": 1196,
+  "classes": [
+    "normal",
+    "paralysis"
+  ],
+  "image_size": [
+    224,
+    224
+  ],
+  "splits": {
+    "train": {
+      "normal": 226,
+      "paralysis": 621
+    },
+    "validation": {
+      "normal": 48,
+      "paralysis": 126
+    },
+    "test": {
+      "normal": 50,
+      "paralysis": 125
+    }
+  }
+}
