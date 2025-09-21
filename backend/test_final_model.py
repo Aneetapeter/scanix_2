@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test script to validate model performance on external images
+Test the final model on external images
 """
 
 import joblib
@@ -8,18 +8,16 @@ import numpy as np
 from pathlib import Path
 from PIL import Image
 import json
-import base64
-import io
 
-def extract_robust_features(image):
-    """Extract features matching the robust training"""
+def extract_features(image):
+    """Extract features EXACTLY as in training"""
     try:
         # Convert to RGB if necessary
         if image.mode != 'RGB':
             image = image.convert('RGB')
         
-        # Resize to 128x128 (matching robust training)
-        image = image.resize((128, 128), Image.Resampling.LANCZOS)
+        # Resize image to match training size (64, 64)
+        image = image.resize((64, 64), Image.Resampling.LANCZOS)
         
         # Convert to grayscale
         gray = image.convert('L')
@@ -27,102 +25,53 @@ def extract_robust_features(image):
         
         features = []
         
-        # 1. Facial Asymmetry Features (Most Important for paralysis)
-        left_half = gray_array[:, :64]
-        right_half = gray_array[:, 64:]
+        # 1. Basic pixel features (all pixels)
+        basic_features = gray_array.flatten()
+        features.extend(basic_features)
+        
+        # 2. Asymmetry features (MOST IMPORTANT for paralysis)
+        left_half = gray_array[:, :32]
+        right_half = gray_array[:, 32:]
         right_flipped = np.fliplr(right_half)
         
         # Multiple asymmetry metrics
         asymmetry_mean = np.mean(np.abs(left_half.astype(float) - right_flipped.astype(float)))
         asymmetry_std = np.std(np.abs(left_half.astype(float) - right_flipped.astype(float)))
         asymmetry_max = np.max(np.abs(left_half.astype(float) - right_flipped.astype(float)))
-        asymmetry_median = np.median(np.abs(left_half.astype(float) - right_flipped.astype(float)))
+        features.extend([asymmetry_mean, asymmetry_std, asymmetry_max])
         
-        features.extend([asymmetry_mean, asymmetry_std, asymmetry_max, asymmetry_median])
-        
-        # 2. Eye Region Asymmetry (Critical for paralysis detection)
-        eye_region_left = gray_array[30:60, 20:60]  # Left eye region
-        eye_region_right = gray_array[30:60, 68:108]  # Right eye region
+        # 3. Eye region asymmetry (critical for paralysis)
+        eye_region_left = gray_array[20:40, 15:45]  # Left eye region
+        eye_region_right = gray_array[20:40, 19:49]  # Right eye region
         eye_region_right_flipped = np.fliplr(eye_region_right)
         
-        eye_asymmetry_mean = np.mean(np.abs(eye_region_left.astype(float) - eye_region_right_flipped.astype(float)))
-        eye_asymmetry_std = np.std(np.abs(eye_region_left.astype(float) - eye_region_right_flipped.astype(float)))
-        features.extend([eye_asymmetry_mean, eye_asymmetry_std])
+        eye_asymmetry = np.mean(np.abs(eye_region_left.astype(float) - eye_region_right_flipped.astype(float)))
+        features.append(eye_asymmetry)
         
-        # 3. Mouth Region Asymmetry
-        mouth_region_left = gray_array[80:110, 40:80]  # Left mouth region
-        mouth_region_right = gray_array[80:110, 48:88]  # Right mouth region
+        # 4. Mouth region asymmetry
+        mouth_region_left = gray_array[45:60, 20:40]  # Left mouth region
+        mouth_region_right = gray_array[45:60, 24:44]  # Right mouth region
         mouth_region_right_flipped = np.fliplr(mouth_region_right)
         
-        mouth_asymmetry_mean = np.mean(np.abs(mouth_region_left.astype(float) - mouth_region_right_flipped.astype(float)))
-        mouth_asymmetry_std = np.std(np.abs(mouth_region_left.astype(float) - mouth_region_right_flipped.astype(float)))
-        features.extend([mouth_asymmetry_mean, mouth_asymmetry_std])
+        mouth_asymmetry = np.mean(np.abs(mouth_region_left.astype(float) - mouth_region_right_flipped.astype(float)))
+        features.append(mouth_asymmetry)
         
-        # 4. Edge Asymmetry
-        left_edges_x = np.abs(np.diff(left_half, axis=1))
-        left_edges_y = np.abs(np.diff(left_half, axis=0))
-        right_edges_x = np.abs(np.diff(right_half, axis=1))
-        right_edges_y = np.abs(np.diff(right_half, axis=0))
-        right_edges_x_flipped = np.fliplr(right_edges_x)
-        right_edges_y_flipped = np.fliplr(right_edges_y)
+        # 5. Edge features
+        grad_x = np.abs(np.diff(gray_array, axis=1))
+        grad_y = np.abs(np.diff(gray_array, axis=0))
+        edge_density = (np.sum(grad_x) + np.sum(grad_y)) / (64 * 64)
+        features.append(edge_density)
         
-        edge_asymmetry_x = np.mean(np.abs(left_edges_x.astype(float) - right_edges_x_flipped.astype(float)))
-        edge_asymmetry_y = np.mean(np.abs(left_edges_y.astype(float) - right_edges_y_flipped.astype(float)))
-        features.extend([edge_asymmetry_x, edge_asymmetry_y])
-        
-        # 5. Texture Asymmetry
-        left_texture = np.abs(np.diff(left_half, axis=1)) + np.abs(np.diff(left_half, axis=0))
-        right_texture = np.abs(np.diff(right_half, axis=1)) + np.abs(np.diff(right_half, axis=0))
-        right_texture_flipped = np.fliplr(right_texture)
-        
-        texture_asymmetry = np.mean(np.abs(left_texture - right_texture_flipped))
-        features.append(texture_asymmetry)
-        
-        # 6. Histogram Asymmetry
-        left_hist, _ = np.histogram(left_half.flatten(), bins=32, range=(0, 256))
-        right_hist, _ = np.histogram(right_half.flatten(), bins=32, range=(0, 256))
-        
-        hist_correlation = np.corrcoef(left_hist, right_hist)[0, 1]
-        hist_chi_square = np.sum((left_hist - right_hist) ** 2 / (right_hist + 1e-8))
-        features.extend([hist_correlation, hist_chi_square])
-        
-        # 7. Regional Asymmetry (divide face into regions)
-        regions = [
-            (0, 32, 0, 64),    # Top left
-            (0, 32, 64, 128),  # Top right
-            (32, 64, 0, 64),   # Mid left
-            (32, 64, 64, 128), # Mid right
-            (64, 96, 0, 64),   # Lower left
-            (64, 96, 64, 128), # Lower right
-        ]
-        
-        for y1, y2, x1, x2 in regions:
-            region_left = gray_array[y1:y2, x1:x2]
-            region_right = gray_array[y1:y2, x1+64:x2+64] if x2 <= 64 else gray_array[y1:y2, x1-64:x2-64]
-            if region_right.shape == region_left.shape:
-                region_right_flipped = np.fliplr(region_right)
-                region_asymmetry = np.mean(np.abs(region_left.astype(float) - region_right_flipped.astype(float)))
-                features.append(region_asymmetry)
-        
-        # 8. Statistical features
+        # 6. Statistical features
         stats_features = [
             np.mean(gray_array),
             np.std(gray_array),
             np.var(gray_array),
             np.median(gray_array),
             np.percentile(gray_array, 25),
-            np.percentile(gray_array, 75),
-            np.percentile(gray_array, 90),
-            np.percentile(gray_array, 95),
-            np.skew(gray_array.flatten()),
-            np.kurtosis(gray_array.flatten())
+            np.percentile(gray_array, 75)
         ]
         features.extend(stats_features)
-        
-        # 9. Global features (reduced pixel sampling for robustness)
-        # Sample every 8th pixel to reduce overfitting
-        sampled_pixels = gray_array[::8, ::8].flatten()
-        features.extend(sampled_pixels)
         
         return np.array(features)
         
@@ -133,14 +82,14 @@ def extract_robust_features(image):
 def test_external_image(image_path, model, scaler):
     """Test a single external image"""
     try:
-        print(f"\n🔍 Testing external image: {image_path}")
+        print(f"\n🔍 Testing image: {image_path}")
         
         with Image.open(image_path) as img:
             print(f"   Original size: {img.size}")
             print(f"   Original mode: {img.mode}")
             
             # Extract features
-            features = extract_robust_features(img)
+            features = extract_features(img)
             if features is None:
                 print("❌ Feature extraction failed")
                 return None
@@ -185,7 +134,7 @@ def test_external_image(image_path, model, scaler):
 
 def main():
     """Test external images"""
-    print("🧪 Testing External Images with Current Model")
+    print("🧪 Testing External Images with Final Model")
     print("=" * 50)
     
     # Load model
@@ -199,6 +148,7 @@ def main():
         print("✅ Model loaded successfully")
         print(f"   Model type: {model_info.get('model_type', 'Unknown')}")
         print(f"   Accuracy: {model_info.get('accuracy', 0.0):.4f}")
+        print(f"   ROC AUC: {model_info.get('roc_auc', 0.0):.4f}")
         print(f"   Expected features: {model.n_features_in_}")
         
     except Exception as e:
@@ -225,8 +175,8 @@ def main():
                 if result:
                     results.append(result)
                 
-                # Limit to first 5 images per directory for testing
-                if len([r for r in results if test_dir in r['image_path']]) >= 5:
+                # Limit to first 3 images per directory for testing
+                if len([r for r in results if test_dir in r['image_path']]) >= 3:
                     break
     
     # Summary

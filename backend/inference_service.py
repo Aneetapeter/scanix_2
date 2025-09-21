@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Exact Inference Service for Facial Paralysis Detection
-Uses standardized preprocessing to ensure training/inference consistency
+Working Inference Service for Facial Paralysis Detection
 """
 
 import os
@@ -15,15 +14,14 @@ from flask_cors import CORS
 import base64
 import io
 from datetime import datetime
-from standardized_preprocessing import preprocessor
 
-class ExactFacialParalysisInference:
+class FacialParalysisInference:
     def __init__(self, models_dir='models'):
         self.models_dir = Path(models_dir)
         self.ml_model = None
         self.scaler = None
         self.model_info = None
-        self.image_size = (128, 128)  # EXACT same as training
+        self.image_size = (64, 64)
         
         # Load models
         self.load_models()
@@ -48,70 +46,99 @@ class ExactFacialParalysisInference:
             print(f"❌ Error loading models: {e}")
             raise
     
-    def extract_paralysis_features(self, image):
-        """Extract features using standardized preprocessing"""
+    def extract_features(self, image):
+        """Extract features EXACTLY as in training"""
         try:
-            print(f"🔍 Starting standardized feature extraction...")
-            print(f"   Original image size: {image.size}")
-            print(f"   Original image mode: {image.mode}")
+            # Convert to RGB if necessary
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
             
-            # Use standardized preprocessing
-            features = preprocessor.extract_paralysis_features(image)
+            # Resize image to match training size (64, 64)
+            image = image.resize((64, 64), Image.Resampling.LANCZOS)
             
-            if features is None:
-                print(f"❌ Feature extraction failed")
-                return None
+            # Convert to grayscale
+            gray = image.convert('L')
+            gray_array = np.array(gray)
             
-            print(f"✅ Standardized feature extraction completed")
-            print(f"   Total features: {len(features)}")
-            print(f"   Expected features: {self.ml_model.n_features_in_}")
+            features = []
             
-            return features
+            # 1. Basic pixel features (all pixels)
+            basic_features = gray_array.flatten()
+            features.extend(basic_features)
+            
+            # 2. Asymmetry features (MOST IMPORTANT for paralysis)
+            left_half = gray_array[:, :32]
+            right_half = gray_array[:, 32:]
+            right_flipped = np.fliplr(right_half)
+            
+            # Multiple asymmetry metrics
+            asymmetry_mean = np.mean(np.abs(left_half.astype(float) - right_flipped.astype(float)))
+            asymmetry_std = np.std(np.abs(left_half.astype(float) - right_flipped.astype(float)))
+            asymmetry_max = np.max(np.abs(left_half.astype(float) - right_flipped.astype(float)))
+            features.extend([asymmetry_mean, asymmetry_std, asymmetry_max])
+            
+            # 3. Eye region asymmetry (critical for paralysis)
+            eye_region_left = gray_array[20:40, 15:45]  # Left eye region
+            eye_region_right = gray_array[20:40, 19:49]  # Right eye region
+            eye_region_right_flipped = np.fliplr(eye_region_right)
+            
+            eye_asymmetry = np.mean(np.abs(eye_region_left.astype(float) - eye_region_right_flipped.astype(float)))
+            features.append(eye_asymmetry)
+            
+            # 4. Mouth region asymmetry
+            mouth_region_left = gray_array[45:60, 20:40]  # Left mouth region
+            mouth_region_right = gray_array[45:60, 24:44]  # Right mouth region
+            mouth_region_right_flipped = np.fliplr(mouth_region_right)
+            
+            mouth_asymmetry = np.mean(np.abs(mouth_region_left.astype(float) - mouth_region_right_flipped.astype(float)))
+            features.append(mouth_asymmetry)
+            
+            # 5. Edge features
+            grad_x = np.abs(np.diff(gray_array, axis=1))
+            grad_y = np.abs(np.diff(gray_array, axis=0))
+            edge_density = (np.sum(grad_x) + np.sum(grad_y)) / (64 * 64)
+            features.append(edge_density)
+            
+            # 6. Statistical features
+            stats_features = [
+                np.mean(gray_array),
+                np.std(gray_array),
+                np.var(gray_array),
+                np.median(gray_array),
+                np.percentile(gray_array, 25),
+                np.percentile(gray_array, 75)
+            ]
+            features.extend(stats_features)
+            
+            # Convert to numpy array
+            features_array = np.array(features)
+            
+            return features_array
             
         except Exception as e:
-            print(f"❌ Error in standardized feature extraction: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"❌ Error in feature extraction: {e}")
             return None
     
     def predict(self, image):
-        """Predict facial paralysis from image using standardized preprocessing"""
+        """Predict facial paralysis from image"""
         try:
-            print(f"🚀 Starting prediction with standardized preprocessing...")
-            
-            # Extract features using standardized preprocessing
-            features = self.extract_paralysis_features(image)
+            # Extract features
+            features = self.extract_features(image)
             if features is None:
-                print(f"❌ Feature extraction failed")
                 return None
-            
-            print(f"✅ Features extracted successfully")
-            print(f"   Feature count: {len(features)}")
-            print(f"   Feature shape: {features.shape}")
-            print(f"   Feature dtype: {features.dtype}")
             
             # Check if feature count matches model expectations
             expected_features = self.ml_model.n_features_in_
             if len(features) != expected_features:
-                print(f"❌ Feature count mismatch!")
-                print(f"   Expected: {expected_features}")
-                print(f"   Got: {len(features)}")
+                print(f"❌ Feature count mismatch! Expected: {expected_features}, Got: {len(features)}")
                 return None
             
             # Scale features
-            print(f"🔧 Scaling features...")
             features_scaled = self.scaler.transform([features])
-            print(f"   Scaled features shape: {features_scaled.shape}")
             
             # Make prediction
-            print(f"🤖 Making prediction...")
             prediction = self.ml_model.predict(features_scaled)[0]
             probability = self.ml_model.predict_proba(features_scaled)[0]
-            
-            print(f"✅ Prediction successful!")
-            print(f"   Prediction: {prediction}")
-            print(f"   Probabilities: {probability}")
-            print(f"   Confidence: {max(probability):.3f}")
             
             return {
                 'prediction': int(prediction),
@@ -126,9 +153,6 @@ class ExactFacialParalysisInference:
             
         except Exception as e:
             print(f"❌ Error in prediction: {e}")
-            import traceback
-            print(f"📋 Full traceback:")
-            traceback.print_exc()
             return None
 
 # Initialize Flask app
@@ -142,11 +166,11 @@ def initialize_service():
     """Initialize the inference service"""
     global inference_service
     try:
-        inference_service = ExactFacialParalysisInference()
-        print("✅ Exact inference service initialized successfully")
+        inference_service = FacialParalysisInference()
+        print("✅ Inference service initialized successfully")
         return True
     except Exception as e:
-        print(f"❌ Failed to initialize exact inference service: {e}")
+        print(f"❌ Failed to initialize inference service: {e}")
         return False
 
 @app.route('/health', methods=['GET'])
@@ -164,39 +188,25 @@ def health_check():
 def predict_image():
     """Predict facial paralysis from uploaded image"""
     try:
-        print(f"🚀 Received prediction request")
-        
         if inference_service is None:
-            print(f"❌ Model not loaded")
             return jsonify({'error': 'Model not loaded'}), 500
         
         # Get image data
         data = request.get_json()
         if 'image' not in data:
-            print(f"❌ No image provided in request")
             return jsonify({'error': 'No image provided'}), 400
-        
-        print(f"✅ Image data received, length: {len(data['image'])}")
         
         # Decode base64 image
         try:
             image_data = base64.b64decode(data['image'])
             image = Image.open(io.BytesIO(image_data))
-            print(f"✅ Image decoded successfully: {image.size}, {image.mode}")
         except Exception as e:
-            print(f"❌ Image decode error: {str(e)}")
-            import traceback
-            traceback.print_exc()
             return jsonify({'error': f'Invalid image data: {str(e)}'}), 400
         
         # Make prediction
-        print(f"🔍 Starting prediction...")
         result = inference_service.predict(image)
         if result is None:
-            print(f"❌ Prediction returned None")
-            return jsonify({'error': 'Prediction failed - check server logs'}), 500
-        
-        print(f"✅ Prediction successful: {result}")
+            return jsonify({'error': 'Prediction failed'}), 500
         
         # Add model info
         result['model_info'] = {
@@ -208,10 +218,6 @@ def predict_image():
         return jsonify(result)
         
     except Exception as e:
-        print(f"❌ Prediction endpoint error: {str(e)}")
-        import traceback
-        print(f"📋 Full traceback:")
-        traceback.print_exc()
         return jsonify({'error': f'Prediction error: {str(e)}'}), 500
 
 @app.route('/model_info', methods=['GET'])
@@ -223,7 +229,7 @@ def get_model_info():
     return jsonify(inference_service.model_info)
 
 if __name__ == '__main__':
-    print("🚀 Starting EXACT Facial Paralysis Detection API...")
+    print("🚀 Starting Facial Paralysis Detection API...")
     
     if initialize_service():
         print("✅ Service ready!")

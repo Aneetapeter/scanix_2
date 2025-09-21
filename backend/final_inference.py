@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Simple Inference Service for Facial Paralysis Detection
-Fixed to work with current model
+FINAL Working Inference Service for Facial Paralysis Detection
+Works with the final trained model
 """
 
 import os
@@ -16,13 +16,13 @@ import base64
 import io
 from datetime import datetime
 
-class SimpleFacialParalysisInference:
+class FinalFacialParalysisInference:
     def __init__(self, models_dir='models'):
         self.models_dir = Path(models_dir)
         self.ml_model = None
         self.scaler = None
         self.model_info = None
-        self.image_size = (64, 64)  # Match current model
+        self.image_size = (64, 64)  # Match training size
         
         # Load models
         self.load_models()
@@ -41,6 +41,7 @@ class SimpleFacialParalysisInference:
             print("✅ Models loaded successfully")
             print(f"   Model type: {self.model_info.get('model_type', 'Unknown')}")
             print(f"   Accuracy: {self.model_info.get('accuracy', 0.0):.4f}")
+            print(f"   ROC AUC: {self.model_info.get('roc_auc', 0.0):.4f}")
             print(f"   Expected features: {self.ml_model.n_features_in_}")
             
         except Exception as e:
@@ -48,7 +49,7 @@ class SimpleFacialParalysisInference:
             raise
     
     def extract_features(self, image):
-        """Extract features matching the current model"""
+        """Extract features EXACTLY as in training"""
         try:
             print(f"🔍 Starting feature extraction...")
             print(f"   Original image size: {image.size}")
@@ -58,7 +59,7 @@ class SimpleFacialParalysisInference:
             if image.mode != 'RGB':
                 image = image.convert('RGB')
             
-            # Resize image to match current model (64, 64)
+            # Resize image to match training size (64, 64)
             image = image.resize((64, 64), Image.Resampling.LANCZOS)
             
             # Convert to grayscale
@@ -69,37 +70,44 @@ class SimpleFacialParalysisInference:
             
             features = []
             
-            # 1. Basic pixel features (all pixels flattened)
+            # 1. Basic pixel features (all pixels)
             basic_features = gray_array.flatten()
             features.extend(basic_features)
             
-            # 2. Asymmetry features (crucial for paralysis detection)
+            # 2. Asymmetry features (MOST IMPORTANT for paralysis)
             left_half = gray_array[:, :32]
             right_half = gray_array[:, 32:]
             right_flipped = np.fliplr(right_half)
             
-            # Calculate asymmetry metrics
-            asymmetry = np.mean(np.abs(left_half.astype(float) - right_flipped.astype(float)))
-            features.append(asymmetry)
+            # Multiple asymmetry metrics
+            asymmetry_mean = np.mean(np.abs(left_half.astype(float) - right_flipped.astype(float)))
+            asymmetry_std = np.std(np.abs(left_half.astype(float) - right_flipped.astype(float)))
+            asymmetry_max = np.max(np.abs(left_half.astype(float) - right_flipped.astype(float)))
+            features.extend([asymmetry_mean, asymmetry_std, asymmetry_max])
             
-            # 3. Edge features
+            # 3. Eye region asymmetry (critical for paralysis)
+            eye_region_left = gray_array[20:40, 15:45]  # Left eye region
+            eye_region_right = gray_array[20:40, 19:49]  # Right eye region
+            eye_region_right_flipped = np.fliplr(eye_region_right)
+            
+            eye_asymmetry = np.mean(np.abs(eye_region_left.astype(float) - eye_region_right_flipped.astype(float)))
+            features.append(eye_asymmetry)
+            
+            # 4. Mouth region asymmetry
+            mouth_region_left = gray_array[45:60, 20:40]  # Left mouth region
+            mouth_region_right = gray_array[45:60, 24:44]  # Right mouth region
+            mouth_region_right_flipped = np.fliplr(mouth_region_right)
+            
+            mouth_asymmetry = np.mean(np.abs(mouth_region_left.astype(float) - mouth_region_right_flipped.astype(float)))
+            features.append(mouth_asymmetry)
+            
+            # 5. Edge features
             grad_x = np.abs(np.diff(gray_array, axis=1))
             grad_y = np.abs(np.diff(gray_array, axis=0))
             edge_density = (np.sum(grad_x) + np.sum(grad_y)) / (64 * 64)
             features.append(edge_density)
             
-            # 4. Texture features (block-based)
-            for i in range(0, 64, 8):
-                for j in range(0, 64, 8):
-                    block = gray_array[i:i+8, j:j+8]
-                    if block.size > 0:
-                        features.extend([np.mean(block), np.std(block)])
-                        if block.shape[0] > 1 and block.shape[1] > 1:
-                            grad_x = np.abs(np.diff(block, axis=1))
-                            grad_y = np.abs(np.diff(block, axis=0))
-                            features.extend([np.mean(grad_x), np.mean(grad_y)])
-            
-            # 5. Statistical features
+            # 6. Statistical features
             stats_features = [
                 np.mean(gray_array),
                 np.std(gray_array),
@@ -190,11 +198,11 @@ def initialize_service():
     """Initialize the inference service"""
     global inference_service
     try:
-        inference_service = SimpleFacialParalysisInference()
-        print("✅ Simple inference service initialized successfully")
+        inference_service = FinalFacialParalysisInference()
+        print("✅ Final inference service initialized successfully")
         return True
     except Exception as e:
-        print(f"❌ Failed to initialize simple inference service: {e}")
+        print(f"❌ Failed to initialize final inference service: {e}")
         return False
 
 @app.route('/health', methods=['GET'])
@@ -205,7 +213,8 @@ def health_check():
         'timestamp': datetime.now().isoformat(),
         'model_loaded': inference_service is not None,
         'model_type': inference_service.model_info.get('model_type', 'Unknown') if inference_service else 'Unknown',
-        'accuracy': inference_service.model_info.get('accuracy', 0.0) if inference_service else 0.0
+        'accuracy': inference_service.model_info.get('accuracy', 0.0) if inference_service else 0.0,
+        'roc_auc': inference_service.model_info.get('roc_auc', 0.0) if inference_service else 0.0
     })
 
 @app.route('/predict', methods=['POST'])
@@ -250,6 +259,7 @@ def predict_image():
         result['model_info'] = {
             'model_type': inference_service.model_info.get('model_type', 'Unknown'),
             'accuracy': inference_service.model_info.get('accuracy', 0.0),
+            'roc_auc': inference_service.model_info.get('roc_auc', 0.0),
             'training_date': inference_service.model_info.get('training_date', 'Unknown')
         }
         
@@ -271,7 +281,7 @@ def get_model_info():
     return jsonify(inference_service.model_info)
 
 if __name__ == '__main__':
-    print("🚀 Starting Simple Facial Paralysis Detection API...")
+    print("🚀 Starting FINAL Facial Paralysis Detection API...")
     
     if initialize_service():
         print("✅ Service ready!")

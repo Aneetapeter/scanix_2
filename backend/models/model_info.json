@@ -4,19 +4,23 @@
     64,
     64
   ],
-  "feature_count": 4360,
-  "n_estimators": 200,
-  "accuracy": 0.9340659340659341,
-  "training_date": "2025-09-20T13:17:03.162379",
-  "total_images": 455,
-  "normal_images": 230,
-  "paralysis_images": 225,
+  "feature_count": 4108,
+  "n_estimators": 150,
+  "max_depth": 12,
+  "accuracy": 0.9722222222222222,
+  "roc_auc": 0.9981481481481481,
+  "oob_score": 0.9597222222222223,
+  "training_date": "2025-09-21T13:44:39.539902",
+  "total_images": 900,
+  "normal_images": 450,
+  "paralysis_images": 450,
   "improvements": [
-    "Enhanced feature extraction",
-    "Class balancing",
-    "Feature scaling",
-    "Improved model parameters",
-    "Asymmetry detection",
-    "Texture analysis"
+    "Data augmentation for better generalization",
+    "Regularized model parameters to prevent overfitting",
+    "Advanced facial asymmetry detection",
+    "Eye and mouth region analysis",
+    "Balanced class weights",
+    "Cross-validation for validation",
+    "Reduced overfitting with proper regularization"
   ]
 }
